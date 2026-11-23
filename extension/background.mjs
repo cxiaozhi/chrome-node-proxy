@@ -69,6 +69,7 @@ async function state() {
   const current = activeNode(library, settings);
   return {
     activeId: current?.id ?? null,
+    groupMeasurement: true,
     testRun: testRun ?? delays[TEST_STATE_KEY] ?? null,
     localStopped: !current && Boolean(configuredNode(library, settings)?.proxy),
     ownsSettings: settings.levelOfControl === OWN,
@@ -238,15 +239,19 @@ async function runMeasurements(nodes, run) {
   }
 }
 
-async function measureNodes({ groupId, id }) {
+async function measureNodes({ groupId, id, ids }) {
   const library = await readLibrary();
-  const candidates = groupId ? library.groups.find(group => group.id === groupId)?.nodes ?? [] : [findNode(library, id)];
+  const requestedIds = new Set(id ? [id] : Array.isArray(ids) ? ids : []);
+  const candidates = groupId ? library.groups.find(group => group.id === groupId)?.nodes ?? [] :
+    allNodes(library).filter(node => requestedIds.has(node.id));
   const nodes = candidates.filter(node => node && canMeasure(node));
   if (!nodes.length) throw new Error('没有可测速的节点。');
   if (testRun) throw new Error('已有测速正在进行。');
   const run = { ids: nodes.map(node => node.id), groupId: groupId ?? null, done: 0, total: nodes.length };
   testRun = run;
-  void runMeasurements(nodes, run).catch(() => {});
+  const job = runMeasurements(nodes, run);
+  if (groupId || id) void job.catch(() => {});
+  else await job;
 }
 
 async function handle(message) {

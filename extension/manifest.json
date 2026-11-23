@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "直连代理",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "导入订阅，启用 HTTP、SOCKS、Shadowsocks 和 VMess 节点。",
   "permissions": [
     "proxy",

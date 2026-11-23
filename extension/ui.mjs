@@ -7,6 +7,8 @@ let busy = false;
 let view = 'nodes';
 let deleting = null;
 let pendingIds = new Set();
+let legacyMeasurement = null;
+const LEGACY_BATCH_SIZE = 6;
 const dateFormat = new Intl.DateTimeFormat('sv-SE', { dateStyle: 'short' });
 
 async function send(type, data = {}) {
@@ -82,8 +84,33 @@ function renderStatus(nodes) {
   byId('disconnect').hidden = !current.ownsSettings;
 }
 
+function measurementRun() {
+  return legacyMeasurement ?? current.testRun;
+}
+
 function measure(selection) {
-  if (!current.testRun?.ids) void run(() => send('measure', selection));
+  if (measurementRun()?.ids) return;
+  if (current.groupMeasurement) {
+    void run(() => send('measure', selection));
+    return;
+  }
+  // An unpacked extension can load new popup files while its previous worker is still registered.
+  const nodes = selection.groupId ? current.groups.find(group => group.id === selection.groupId)?.nodes ?? [] :
+    current.groups.flatMap(group => group.nodes).filter(node => node.id === selection.id);
+  const ids = nodes.filter(node => node.canMeasure).map(node => node.id);
+  if (!ids.length) return;
+  void run(async () => {
+    legacyMeasurement = { ids, groupId: selection.groupId, done: 0, total: ids.length };
+    render();
+    try {
+      for (let offset = 0; offset < ids.length; offset += LEGACY_BATCH_SIZE) {
+        const batch = ids.slice(offset, offset + LEGACY_BATCH_SIZE);
+        await send('measure', { ids: batch });
+        legacyMeasurement.done += batch.length;
+        await reload();
+      }
+    } finally { legacyMeasurement = null; }
+  }, '正在测速…');
 }
 
 function formatBytes(bytes) {
@@ -131,7 +158,7 @@ function renderNode(node) {
   const actions = element('div', 'node-actions');
   if (node.canMeasure) {
     actions.append(renderDelay(node));
-    const test = button('测速', 'secondary', () => measure({ id: node.id }), Boolean(current.testRun?.ids));
+    const test = button('测速', 'secondary', () => measure({ id: node.id }), Boolean(measurementRun()?.ids));
     test.setAttribute('aria-label', `测速 ${node.name}`);
     actions.append(test);
   }
@@ -149,7 +176,7 @@ function renderGroup(group, { nodes = [], unsupported = [], subscription = false
   name.title = group.name;
   info.append(name, element('p', 'meta', `${group.nodes.length} 个可用`));
   const actions = element('div', 'group-actions');
-  const testRun = current.testRun;
+  const testRun = measurementRun();
   if (!subscription && group.nodes.some(node => node.canMeasure)) {
     const testingGroup = testRun?.groupId === group.id;
     const label = testingGroup ? `${testRun.done}/${testRun.total}` : '整组测速';
@@ -203,7 +230,7 @@ function renderGroup(group, { nodes = [], unsupported = [], subscription = false
 function render() {
   if (!current) return;
   const nodes = current.groups.flatMap(group => group.nodes);
-  const testRun = current.testRun;
+  const testRun = measurementRun();
   pendingIds = new Set(testRun?.ids?.slice(testRun.done) ?? []);
   renderStatus(nodes);
   if (view === 'subscriptions') {

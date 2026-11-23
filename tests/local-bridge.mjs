@@ -14,6 +14,7 @@ const extension = resolve(process.env.PROXY_TEST_EXTENSION ?? 'extension');
 const files = resolve('bridge');
 const useRegistration = process.argv.includes('--check-extension-id');
 const measure = process.env.PROXY_TEST_MEASURE === '1';
+const legacyWorker = process.env.PROXY_TEST_LEGACY_WORKER === '1';
 function openBrowser() {
   return chromium.launchPersistentContext('', {
     channel: 'chromium', headless: true,
@@ -67,8 +68,13 @@ async function probe(port) {
 
 try {
   let received = 0;
+  let latencyRequests = 0;
   origin = createHttp((req, res) => {
-    if (req.url === '/latency-test') { setTimeout(() => res.writeHead(204).end(), 750); return; }
+    if (req.url === '/latency-test') {
+      latencyRequests++;
+      setTimeout(() => res.writeHead(204).end(), 150);
+      return;
+    }
     if (req.url.startsWith('/protocol-')) received++;
     res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' }).end('fixture response');
   });
@@ -131,17 +137,29 @@ ${diagnostics}`);
     const before = await settings();
     await page.getByRole('button', { name: '测速 SS Fixture', exact: true }).click();
     await page.locator('.delay[data-result=ready]').waitFor();
+    await page.evaluate(async () => {
+      const { proxyLibrary } = await chrome.storage.local.get('proxyLibrary');
+      const [group] = proxyLibrary.groups;
+      for (let index = 2; index < 46; index++) {
+        group.nodes.push({ ...group.nodes[index % 2], id: `fixture-${index}`, name: `Fixture ${index}` });
+      }
+      await chrome.storage.local.set({ proxyLibrary });
+    });
+    await page.getByText('46 个节点', { exact: true }).waitFor();
     await page.getByRole('button', { name: '整组测速', exact: true }).click();
     await page.locator('.delay[data-result=waiting]').first().waitFor();
-    await page.close();
-    page = await context.newPage();
-    await page.goto(`chrome-extension://${base.hostname}/popup.html`);
-    await page.waitForFunction(() => document.querySelectorAll('.delay[data-result=ready]').length === 2);
+    if (!legacyWorker) {
+      await page.close();
+      page = await context.newPage();
+      await page.goto(`chrome-extension://${base.hostname}/popup.html`);
+    }
+    await page.waitForFunction(() => document.querySelectorAll('.delay[data-result=ready]').length === 46, null, { timeout: 35000 });
+    assert.ok(latencyRequests >= 47);
     assert.deepEqual(await settings(), before);
     await page.reload();
-    await page.waitForFunction(() => document.querySelectorAll('.delay[data-result=ready]').length === 2);
+    await page.waitForFunction(() => document.querySelectorAll('.delay[data-result=ready]').length === 46);
     if (process.env.PROXY_TEST_SCREENSHOT) await page.screenshot({ path: process.env.PROXY_TEST_SCREENSHOT });
-    console.log('Passed: individual and group latency are visible, finish with the panel closed, and preserve the active proxy.');
+    console.log(`Passed: one node and a group of 46, ${legacyWorker ? 'legacy worker protocol' : 'background job survives panel close'}, active proxy preserved.`);
   }
   await page.getByRole('button', { name: '停用', exact: true }).click();
   await page.locator('#status').getByText('未启用', { exact: true }).waitFor();

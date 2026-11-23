@@ -11,7 +11,7 @@
 
 ## 使用现有安装包
 
-1. 解压 `direct-proxy-chrome-v1.4.0.zip`。打开 `chrome://extensions/`，启用「开发者模式」，点击「加载已解压的扩展程序」，选择含 `manifest.json` 的目录。
+1. 解压 `direct-proxy-chrome-v1.4.1.zip`。打开 `chrome://extensions/`，启用「开发者模式」，点击「加载已解压的扩展程序」，选择含 `manifest.json` 的目录。
 2. 测速需要 1.3.0 的 Windows 本机组件。安装或升级组件时，解压单独的 `direct-proxy-windows-setup.zip`，双击 `Install.cmd`。安装脚本从 MetaCubeX 官方发布下载并校验 Windows x64 Mihomo 1.19.34，在当前 Windows 账户内登记本机组件。
 3. 点击 Chrome 工具栏的「直连代理」。在「添加」导入订阅或文件，在「节点」启用或测速，在「订阅」查看流量、到期日期和更新订阅。
 
