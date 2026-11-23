@@ -8,6 +8,8 @@ let view = 'nodes';
 let deleting = null;
 let pendingIds = new Set();
 let legacyMeasurement = null;
+let measurementBusy = false;
+let measurementError = null;
 const LEGACY_BATCH_SIZE = 6;
 const dateFormat = new Intl.DateTimeFormat('sv-SE', { dateStyle: 'short' });
 
@@ -88,29 +90,39 @@ function measurementRun() {
   return legacyMeasurement ?? current.testRun;
 }
 
-function measure(selection) {
-  if (measurementRun()?.ids) return;
-  if (current.groupMeasurement) {
-    void run(() => send('measure', selection));
-    return;
+async function measure(selection) {
+  if (measurementBusy || measurementRun()?.ids) return;
+  measurementBusy = true;
+  measurementError = null;
+  try {
+    if (current.groupMeasurement) {
+      await send('measure', selection);
+    } else {
+      await measureWithLegacyWorker(selection);
+    }
+  } catch (error) {
+    measurementError = error.message;
+  } finally {
+    measurementBusy = false;
+    legacyMeasurement = null;
+    await reload();
   }
-  // An unpacked extension can load new popup files while its previous worker is still registered.
+}
+
+async function measureWithLegacyWorker(selection) {
+  // A reloaded popup can still be paired with a worker that expects node IDs.
   const nodes = selection.groupId ? current.groups.find(group => group.id === selection.groupId)?.nodes ?? [] :
     current.groups.flatMap(group => group.nodes).filter(node => node.id === selection.id);
   const ids = nodes.filter(node => node.canMeasure).map(node => node.id);
   if (!ids.length) return;
-  void run(async () => {
-    legacyMeasurement = { ids, groupId: selection.groupId, done: 0, total: ids.length };
-    render();
-    try {
-      for (let offset = 0; offset < ids.length; offset += LEGACY_BATCH_SIZE) {
-        const batch = ids.slice(offset, offset + LEGACY_BATCH_SIZE);
-        await send('measure', { ids: batch });
-        legacyMeasurement.done += batch.length;
-        await reload();
-      }
-    } finally { legacyMeasurement = null; }
-  }, '正在测速…');
+  legacyMeasurement = { ids, groupId: selection.groupId, done: 0, total: ids.length };
+  renderMeasurements();
+  for (let offset = 0; offset < ids.length; offset += LEGACY_BATCH_SIZE) {
+    const batch = ids.slice(offset, offset + LEGACY_BATCH_SIZE);
+    await send('measure', { ids: batch });
+    legacyMeasurement.done += batch.length;
+    await reload();
+  }
 }
 
 function formatBytes(bytes) {
@@ -133,21 +145,50 @@ function renderUsage(group) {
   return row;
 }
 
-function renderDelay(node) {
+function updateDelay(delay, node) {
   const pending = pendingIds.has(node.id);
   const measurement = node.measurement;
   const failed = measurement && measurement.ms == null;
   const label = pending ? '…' : !measurement ? '—' : failed ? '失败' : `${measurement.ms} ms`;
-  const delay = element('span', 'delay', label);
+  if (delay.textContent !== label) delay.textContent = label;
   delay.dataset.result = pending ? 'waiting' : !measurement ? 'idle' : failed ? 'failed' : 'ready';
   delay.title = pending ? '正在测速' : !measurement ? '尚未测速' : failed ? '未能通过此节点访问测速地址' : '通过此节点访问测速地址的延迟';
-  return delay;
+}
+
+function updateGroupTest(button, groupId, run) {
+  const label = run?.groupId === groupId ? `${run.done}/${run.total}` : '整组测速';
+  if (button.textContent !== label) button.textContent = label;
+  button.disabled = measurementBusy || Boolean(run?.ids);
+}
+
+function pendingMeasurements(run) {
+  return new Set(run?.ids?.slice(run.done) ?? []);
+}
+
+function renderMeasurements() {
+  if (view !== 'nodes') return;
+  const run = measurementRun();
+  pendingIds = pendingMeasurements(run);
+  const nodes = new Map(current.groups.flatMap(group => group.nodes.map(node => [node.id, node])));
+  for (const row of byId('groups').querySelectorAll('[data-node-id]')) {
+    const node = nodes.get(row.dataset.nodeId);
+    const delay = row.querySelector('.delay');
+    if (!node || !delay) continue;
+    updateDelay(delay, node);
+    row.querySelector('.node-test').disabled = measurementBusy || Boolean(run?.ids);
+  }
+  for (const button of byId('groups').querySelectorAll('[data-test-group]')) updateGroupTest(button, button.dataset.testGroup, run);
+  const testError = measurementError ?? run?.error;
+  const warning = byId('test-error');
+  warning.hidden = !testError;
+  if (warning.textContent !== (testError ?? '')) warning.textContent = testError ?? '';
 }
 
 function renderNode(node) {
   const isActive = current.activeId === node.id;
   const row = element('div', 'node');
   row.dataset.active = String(isActive);
+  row.dataset.nodeId = node.id;
   const info = element('div', 'node-info');
   const title = element('div', 'node-name', node.name);
   title.title = node.name;
@@ -157,8 +198,10 @@ function renderNode(node) {
   info.append(title, endpoint);
   const actions = element('div', 'node-actions');
   if (node.canMeasure) {
-    actions.append(renderDelay(node));
-    const test = button('测速', 'secondary', () => measure({ id: node.id }), Boolean(measurementRun()?.ids));
+    const delay = element('span', 'delay');
+    updateDelay(delay, node);
+    actions.append(delay);
+    const test = button('测速', 'secondary node-test', () => void measure({ id: node.id }), measurementBusy || Boolean(measurementRun()?.ids));
     test.setAttribute('aria-label', `测速 ${node.name}`);
     actions.append(test);
   }
@@ -176,11 +219,11 @@ function renderGroup(group, { nodes = [], unsupported = [], subscription = false
   name.title = group.name;
   info.append(name, element('p', 'meta', `${group.nodes.length} 个可用`));
   const actions = element('div', 'group-actions');
-  const testRun = measurementRun();
   if (!subscription && group.nodes.some(node => node.canMeasure)) {
-    const testingGroup = testRun?.groupId === group.id;
-    const label = testingGroup ? `${testRun.done}/${testRun.total}` : '整组测速';
-    actions.append(button(label, 'secondary', () => measure({ groupId: group.id }), Boolean(testRun?.ids)));
+    const test = button('整组测速', 'secondary', () => void measure({ groupId: group.id }));
+    test.dataset.testGroup = group.id;
+    updateGroupTest(test, group.id, measurementRun());
+    actions.append(test);
   }
   if (subscription) actions.append(button('更新', 'secondary', () => void run(async () => {
     await allow([group.permission]);
@@ -230,8 +273,7 @@ function renderGroup(group, { nodes = [], unsupported = [], subscription = false
 function render() {
   if (!current) return;
   const nodes = current.groups.flatMap(group => group.nodes);
-  const testRun = measurementRun();
-  pendingIds = new Set(testRun?.ids?.slice(testRun.done) ?? []);
+  pendingIds = pendingMeasurements(measurementRun());
   renderStatus(nodes);
   if (view === 'subscriptions') {
     const subscriptions = current.groups.filter(group => group.kind === 'subscription');
@@ -252,18 +294,29 @@ function render() {
   byId('groups').replaceChildren(...articles);
   if (search && !articles.length) byId('groups').append(element('p', 'empty', '无匹配节点'));
   byId('empty-nodes').hidden = Boolean(current.groups.length);
-  byId('test-error').textContent = testRun?.error ?? '';
-  byId('test-error').hidden = !testRun?.error;
+  renderMeasurements();
 }
 
 let loadRevision = 0;
+let panelSignature = null;
+
+// Latency progress changes badges and test buttons, so keep connection controls in the DOM.
+function panelStructure(state) {
+  return JSON.stringify(state, (key, value) => ['measurement', 'testRun'].includes(key) ? undefined : value);
+}
+
 async function reload() {
   const revision = ++loadRevision;
   try {
     const state = await send('state');
     if (revision !== loadRevision) return;
+    const signature = panelStructure(state);
     current = state;
-    render();
+    if (signature === panelSignature) renderMeasurements();
+    else {
+      panelSignature = signature;
+      render();
+    }
   } catch (error) { if (revision === loadRevision) feedback(error.message, true); }
 }
 

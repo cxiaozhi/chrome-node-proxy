@@ -72,7 +72,7 @@ try {
   origin = createHttp((req, res) => {
     if (req.url === '/latency-test') {
       latencyRequests++;
-      setTimeout(() => res.writeHead(204).end(), 150);
+      setTimeout(() => res.writeHead(204).end(), 750);
       return;
     }
     if (req.url.startsWith('/protocol-')) received++;
@@ -134,7 +134,7 @@ ${diagnostics}`);
   assert.equal(received, 4);
   if (measure) {
     const settings = () => page.evaluate(() => chrome.proxy.settings.get({ incognito: false }));
-    const before = await settings();
+    assert.equal(Boolean(imported.value.groupMeasurement), !legacyWorker);
     await page.getByRole('button', { name: '测速 SS Fixture', exact: true }).click();
     await page.locator('.delay[data-result=ready]').waitFor();
     await page.evaluate(async () => {
@@ -146,8 +146,33 @@ ${diagnostics}`);
       await chrome.storage.local.set({ proxyLibrary });
     });
     await page.getByText('46 个节点', { exact: true }).waitFor();
+    const disable = () => page.getByRole('button', { name: '停用', exact: true }).click();
+    const enable = name => page.locator('.node').filter({ has: page.getByText(name, { exact: true }) })
+      .getByRole('button', { name: '启用', exact: true }).click();
+    const pending = () => page.locator('.delay[data-result=waiting]').count();
+    await disable();
+    await page.locator('#status').getByText('未启用', { exact: true }).waitFor();
     await page.getByRole('button', { name: '整组测速', exact: true }).click();
     await page.locator('.delay[data-result=waiting]').first().waitFor();
+    await enable('SS Fixture');
+    await page.locator('#active-node').getByText('SS Fixture', { exact: true }).waitFor({ timeout: 3500 });
+    assert.ok(await pending() > 0, 'The node must be enabled before latency testing finishes.');
+    const ss = await settings();
+    assert.equal(ss.value.rules.singleProxy.scheme, 'socks5');
+    await page.evaluate(async () => {
+      const { value } = await chrome.proxy.settings.get({ incognito: false });
+      await chrome.proxy.settings.set({ scope: 'regular_only', value: { ...value, rules: { ...value.rules, bypassList: ['<-loopback>'] } } });
+    });
+    await loaded.goto(`http://localhost:${httpPort}/protocol-during-test`, { timeout: 4000 });
+    assert.equal(await loaded.locator('body').innerText(), 'fixture response');
+    assert.equal(received, 5);
+    await enable('VMess Fixture');
+    await page.locator('#active-node').getByText('VMess Fixture', { exact: true }).waitFor({ timeout: 3500 });
+    assert.notEqual((await settings()).value.rules.singleProxy.port, ss.value.rules.singleProxy.port);
+    await disable();
+    await page.locator('#status').getByText('未启用', { exact: true }).waitFor({ timeout: 3500 });
+    assert.ok(await pending() > 0, 'The node must be stopped before latency testing finishes.');
+    const before = await settings();
     if (!legacyWorker) {
       await page.close();
       page = await context.newPage();
@@ -159,10 +184,11 @@ ${diagnostics}`);
     await page.reload();
     await page.waitForFunction(() => document.querySelectorAll('.delay[data-result=ready]').length === 46);
     if (process.env.PROXY_TEST_SCREENSHOT) await page.screenshot({ path: process.env.PROXY_TEST_SCREENSHOT });
-    console.log(`Passed: one node and a group of 46, ${legacyWorker ? 'legacy worker protocol' : 'background job survives panel close'}, active proxy preserved.`);
+    console.log(`Passed: one node and a group of 46, ${legacyWorker ? 'legacy worker protocol' : 'background job survives panel close'}, starts, carries traffic, switches and stops the proxy while measuring.`);
+  } else {
+    await page.getByRole('button', { name: '停用', exact: true }).click();
+    await page.locator('#status').getByText('未启用', { exact: true }).waitFor();
   }
-  await page.getByRole('button', { name: '停用', exact: true }).click();
-  await page.locator('#status').getByText('未启用', { exact: true }).waitFor();
   console.log('Passed: Chrome → native host → Mihomo → local Shadowsocks and VMess servers, then stop.');
 } catch (error) {
   for (const page of (context?.pages() ?? []).filter(page => page.url().endsWith('/popup.html'))) {
