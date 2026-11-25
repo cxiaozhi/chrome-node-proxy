@@ -2,13 +2,13 @@
   "manifest_version": 3,
   "minimum_chrome_version": "120",
   "name": "Clash 浏览器代理",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "关闭 Clash 系统代理时，也能让 Chrome 使用 Clash 当前线路。",
   "icons": { "16": "icons/icon-16.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" },
   "action": {
-    "default_title": "Clash 浏览器代理",
+    "default_title": "Clash 浏览器代理（未启用）",
     "default_popup": "popup.html",
-    "default_icon": { "16": "icons/icon-16.png", "48": "icons/icon-48.png" }
+    "default_icon": { "16": "icons/icon-off-16.png", "48": "icons/icon-off-48.png" }
   },
   "background": { "service_worker": "worker.mjs", "type": "module" },
   "permissions": ["proxy"]
