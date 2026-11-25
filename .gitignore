@@ -1,4 +1,5 @@
 *.exe
 *.zip
+!/release/browser-proxy-*.zip
 *.pem
 node_modules/

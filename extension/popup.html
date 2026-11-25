@@ -1,78 +1,23 @@
 <!doctype html>
-<html lang="zh-CN" class="popup-page">
+<html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>直连代理</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="ui.mjs" type="module"></script>
+  <meta name="color-scheme" content="dark">
+  <title>Clash 浏览器代理</title>
+  <link rel="stylesheet" href="popup.css">
+  <script type="module" src="popup.mjs"></script>
 </head>
-<body class="popup">
-  <main class="popup-shell">
-    <header class="popup-header">
-      <div class="brand">
-        <img src="icon48.png" width="36" height="36" alt="">
-        <div class="brand-copy">
-          <h1>直连代理</h1>
-          <p id="active-node" class="meta" hidden></p>
-        </div>
-      </div>
-      <div class="connection-controls">
-        <span id="status" class="status" role="status">读取中</span>
-        <button id="disconnect" type="button" class="secondary" hidden>停用</button>
-      </div>
+<body>
+  <main>
+    <header>
+      <img src="icons/icon-48.png" alt="" width="32" height="32">
+      <h1>Clash 浏览器代理</h1>
     </header>
-    <nav class="tabs panel-tabs" aria-label="面板">
-      <button type="button" data-view="nodes" aria-controls="nodes-view" aria-pressed="true">节点</button>
-      <button type="button" data-view="subscriptions" aria-controls="subscriptions-view" aria-pressed="false">订阅</button>
-      <button type="button" data-view="add" aria-controls="add-view" aria-pressed="false">+ 添加</button>
-    </nav>
-    <p id="feedback" class="feedback" role="status" aria-live="polite" hidden></p>
-    <div id="panel-content" class="panel-content">
-      <section id="nodes-view" aria-label="代理节点">
-        <div class="node-toolbar" id="node-toolbar" hidden>
-          <input id="search" type="search" placeholder="搜索节点" aria-label="搜索节点">
-          <span id="node-count" class="meta"></span>
-        </div>
-        <p id="test-error" class="feedback" data-error="true" role="status" hidden></p>
-        <div id="groups"></div>
-        <div id="empty-nodes" class="empty" hidden>
-          <p>暂无可用节点</p>
-          <button id="open-subscription" class="primary" type="button">导入订阅</button>
-        </div>
-      </section>
-      <section id="subscriptions-view" aria-label="订阅" hidden>
-        <div id="subscriptions"></div>
-        <button id="add-subscription" class="primary wide" type="button">导入订阅</button>
-      </section>
-      <section id="add-view" aria-label="添加节点" hidden>
-        <div class="tabs import-tabs" aria-label="导入方式">
-          <button type="button" data-form="subscription" aria-pressed="true">订阅链接</button>
-          <button type="button" data-form="import" aria-pressed="false">文件 / 文本</button>
-          <button type="button" data-form="manual" aria-pressed="false">手动添加</button>
-        </div>
-        <form id="subscription" class="form">
-          <label>粘贴订阅链接<input name="url" type="url" required placeholder="https://…" autocomplete="off" spellcheck="false"></label>
-          <button type="submit" class="primary">导入订阅</button>
-          <details class="subscription-name">
-            <summary>自定义名称</summary>
-            <label>订阅名称<input name="name" maxlength="120" autocomplete="off"></label>
-          </details>
-        </form>
-        <form id="import" class="form" hidden>
-          <label>节点链接或 Clash YAML<textarea name="text" rows="5" placeholder="socks5://proxy.example.com:1080#节点名称" spellcheck="false"></textarea></label>
-          <label>或选择配置文件<input name="file" type="file" accept=".yaml,.yml,.txt,.json,text/plain,application/yaml"></label>
-          <button type="submit" class="primary">导入</button>
-        </form>
-        <form id="manual" class="form" hidden>
-          <label>节点名称 <span class="muted">可选</span><input name="name" maxlength="120" autocomplete="off"></label>
-          <label>代理协议<select name="scheme"><option value="http">HTTP</option><option value="https">HTTPS</option><option value="socks5">SOCKS5</option><option value="socks4">SOCKS4</option></select></label>
-          <div class="fields"><label>服务器<input name="host" required placeholder="proxy.example.com" autocomplete="off"></label><label>端口<input name="port" type="number" min="1" max="65535" required value="80"></label></div>
-          <div id="credentials" class="fields auth"><label>用户名<input name="username" maxlength="1024" autocomplete="off"></label><label>密码<input type="password" name="password" maxlength="1024" autocomplete="off"></label></div>
-          <button type="submit" class="primary">保存节点</button>
-        </form>
-      </section>
-    </div>
+    <button id="clash-toggle" type="button" aria-pressed="false" disabled>
+      启用 Clash 浏览器代理 <span class="switch" aria-hidden="true"></span>
+    </button>
+    <p id="status" role="status">正在读取 Chrome 代理设置…</p>
   </main>
 </body>
 </html>

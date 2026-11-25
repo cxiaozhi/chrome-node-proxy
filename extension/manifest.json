@@ -1,36 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "直连代理",
-  "version": "1.4.2",
-  "description": "导入订阅，启用 HTTP、SOCKS、Shadowsocks 和 VMess 节点。",
-  "permissions": [
-    "proxy",
-    "storage",
-    "nativeMessaging",
-    "webRequest",
-    "webRequestAuthProvider"
-  ],
-  "host_permissions": [
-    "https://proxy-auth.invalid/*"
-  ],
-  "optional_host_permissions": [
-    "http://*/*",
-    "https://*/*"
-  ],
-  "background": {
-    "service_worker": "background.mjs",
-    "type": "module"
-  },
-  "incognito": "not_allowed",
+  "minimum_chrome_version": "120",
+  "name": "Clash 浏览器代理",
+  "version": "2.0.2",
+  "description": "关闭 Clash 系统代理时，也能让 Chrome 使用 Clash 当前线路。",
+  "icons": { "16": "icons/icon-16.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" },
   "action": {
-    "default_title": "直连代理",
+    "default_title": "Clash 浏览器代理",
     "default_popup": "popup.html",
-    "default_icon": "icon48.png"
+    "default_icon": { "16": "icons/icon-16.png", "48": "icons/icon-48.png" }
   },
-  "icons": {
-    "16": "icon16.png",
-    "48": "icon48.png",
-    "128": "icon128.png"
-  },
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvxK8JVXSJXjiDzrsZreGjmdDeiWIbb8gWflV+ZAV95cny6SWCucIW+ocg8zBv+R+RtB++YbN1eVxujlWes5ZPDNjktJBtFEjWLa9e9UhYQ1phFDK3nMDVrJFqHcF7Njpi8zLLq0KrOr+9SfGXJaL2TWEOTWhfvmIJv+XzB5XquE9KRrPRa1ciw4eUjzMXA3l0lNZAYVKXshO7LEVZCNfFq39M2Ch+Xe8vb6dpvlZHlZ9YSWrihpSZpp7027DmomRxfc+OY3LqNDvvM3vRPmOou0DMoZ/oZzvA37H+UnRVbNzMqcUg/Eci5sidDf9YMoFZ/052jBcj8/ZTy4ZCqNPxQIDAQAB"
+  "background": { "service_worker": "worker.mjs", "type": "module" },
+  "permissions": ["proxy"]
 }
